@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/pinchtab/pinchtab/internal/config"
 	"github.com/pinchtab/pinchtab/internal/idutil"
@@ -111,6 +112,20 @@ func (b *Bridge) tabSetup(ctx context.Context) {
 	if b.Config.NoAnimations {
 		if err := b.InjectNoAnimations(ctx); err != nil {
 			slog.Warn("no-animations injection failed", "err", err)
+		}
+	}
+
+	// Anti-CDP detection: disable Runtime event dispatching after setup.
+	// chromedp sends Runtime.enable during target initialization (for worker detection
+	// and execution context tracking). CDP detection scripts exploit this by using
+	// console.log(Error) with a custom stack getter — Runtime.consoleAPICalled
+	// serializes the error, triggering the getter. Disabling Runtime events stops
+	// this serialization. Runtime.evaluate (command) still works without events.
+	if b.Config.StealthLevel == "full" {
+		if err := chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
+			return runtime.Disable().Do(ctx)
+		})); err != nil {
+			slog.Warn("runtime.Disable failed", "err", err)
 		}
 	}
 }
