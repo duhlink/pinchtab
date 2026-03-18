@@ -140,6 +140,24 @@ func setupAllocator(cfg *config.RuntimeConfig) (context.Context, context.CancelF
 	w, h := randomWindowSize()
 	opts = append(opts, chromedp.WindowSize(w, h))
 
+	// Stealth: set --user-agent flag to override UA globally (including Service Workers).
+	// CDP emulation.SetUserAgentOverride only affects the page target, not Service Worker
+	// targets. The --user-agent flag overrides the binary's built-in UA at the network level.
+	// Without this, Service Workers report "HeadlessChrome/VERSION" even in --headless=new.
+	if cfg.ChromeVersion != "" {
+		var ua string
+		switch runtime.GOOS {
+		case "darwin":
+			ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + cfg.ChromeVersion + " Safari/537.36"
+		case "windows":
+			ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + cfg.ChromeVersion + " Safari/537.36"
+		default:
+			ua = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + cfg.ChromeVersion + " Safari/537.36"
+		}
+		opts = append(opts, chromedp.UserAgent(ua))
+		slog.Debug("user-agent override applied globally", "version", cfg.ChromeVersion)
+	}
+
 	// Timezone
 	if cfg.Timezone != "" {
 		opts = append(opts, chromedp.Flag("tz", cfg.Timezone))
