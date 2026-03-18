@@ -99,12 +99,13 @@ func setupAllocator(cfg *config.RuntimeConfig) (context.Context, context.CancelF
 		opts = append(opts, chromedp.ExecPath(chromeBinary))
 	}
 
-	// Headless mode: always use 'new' for extension support
+	// Headless mode: use --headless=new which reports regular Chrome UA (not "HeadlessChrome")
+	// and properly handles extensions. Do NOT use --disable-gpu: it forces SwiftShader
+	// (CPU-based renderer) instead of real GPU, causing hasSwiftShader detection in CreepJS.
 	if cfg.Headless {
 		opts = append(opts, chromedp.Flag("headless", "new"))
 		opts = append(opts, chromedp.Flag("hide-scrollbars", true))
 		opts = append(opts, chromedp.Flag("mute-audio", true))
-		opts = append(opts, chromedp.DisableGPU)
 	} else {
 		opts = append(opts, chromedp.Flag("headless", false))
 	}
@@ -383,8 +384,6 @@ func buildChromeArgs(cfg *config.RuntimeConfig, port int) []string {
 	if cfg.Headless {
 		args = append(args,
 			"--headless=new",
-			"--disable-gpu",
-			"--enable-unsafe-swiftshader",
 		)
 	}
 

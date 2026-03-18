@@ -10,6 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"fmt"
+	"math/rand"
+
 	"github.com/pinchtab/pinchtab/internal/activity"
 	"github.com/pinchtab/pinchtab/internal/assets"
 	"github.com/pinchtab/pinchtab/internal/bridge"
@@ -32,7 +35,13 @@ func RunBridgeServer(cfg *config.RuntimeConfig) {
 	bridge.CleanupOrphanedChromeProcesses(cfg.ProfileDir)
 
 	bridgeInstance := bridge.New(context.Background(), nil, cfg)
-	bridgeInstance.StealthScript = assets.StealthScript
+	// Prepend seed + stealth level so the 'full' block in stealth.js executes.
+	// Without this, __pinchtab_stealth_level defaults to 'light' and advanced stealth
+	// (screen override, system colors, canvas noise, etc.) is dead code.
+	bridgeInstance.StealthScript = fmt.Sprintf(
+		"var __pinchtab_seed = %d;\nvar __pinchtab_stealth_level = %q;\n",
+		rand.Intn(1000000000), cfg.StealthLevel,
+	) + assets.StealthScript
 	actStore, err := activity.NewRecorder(activity.Config{
 		Enabled:       cfg.Observability.Activity.Enabled,
 		SessionIdle:   time.Duration(cfg.Observability.Activity.SessionIdleSec) * time.Second,
