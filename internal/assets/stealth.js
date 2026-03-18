@@ -149,9 +149,17 @@ if (stealthLevel === 'full') {
     width: sw, height: sh, availWidth: sw, availHeight: sh - 25,
     colorDepth: 24, pixelDepth: 24
   };
+  // Override on Screen.prototype, NOT on the screen instance.
+  // Real Chrome inherits screen properties from Screen.prototype — there are no
+  // own-property descriptors on the screen object itself. Overriding on the instance
+  // (Object.defineProperty(window.screen, ...)) is detectable via:
+  //   Object.getOwnPropertyDescriptor(screen, 'width') !== undefined → overridden!
+  // Prototype-level overrides are invisible to this check because
+  // getOwnPropertyDescriptor only checks own properties.
+  const screenProto = Object.getPrototypeOf(window.screen);
   for (const [key, value] of Object.entries(overrides)) {
     try {
-      Object.defineProperty(window.screen, key, { get: () => value, configurable: true });
+      Object.defineProperty(screenProto, key, { get: () => value, configurable: true });
     } catch(e) {}
   }
   try {
