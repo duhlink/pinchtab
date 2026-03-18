@@ -129,12 +129,24 @@ const stealthLevel = (typeof __pinchtab_stealth_level !== 'undefined') ? __pinch
 if (stealthLevel === 'full') {
 
 // Fix screen dimensions: headless Chrome reports screen as 800×600 even in new mode.
-// Use window.outerWidth/Height as the screen dimensions (they come from --window-size).
+// Pool entries are CSS pixel resolutions for real Mac displays at DPR=2:
+//   1440×900  → 2880×1800 physical (MacBook Pro 15" Retina)
+//   1920×1080 → 3840×2160 physical (External 4K @2x)
+//   2560×1440 → 5120×2880 physical (iMac 27" 5K / Apple Studio Display)
+// On non-Mac (DPR=1), these are also valid common monitor resolutions.
 // Screen must be STRICTLY larger than window (real monitors > browser windows).
 (function() {
-  const screens = [
-    { w: 1440, h: 900 },  { w: 1536, h: 864 },  { w: 1680, h: 1050 },
-    { w: 1920, h: 1080 }, { w: 2560, h: 1440 }, { w: 3840, h: 2160 },
+  const isMac = navigator.platform === 'MacIntel';
+  const dpr = isMac ? 2 : 1;
+  // Only include resolutions that correspond to real displays at this DPR.
+  const screens = isMac ? [
+    { w: 1440, h: 900 },   // MacBook Pro 15" Retina (2880×1800 physical)
+    { w: 1920, h: 1080 },  // External 4K display @2x (3840×2160 physical)
+    { w: 2560, h: 1440 },  // iMac 27" 5K / Apple Studio Display (5120×2880 physical)
+  ] : [
+    { w: 1920, h: 1080 },  // Full HD
+    { w: 2560, h: 1440 },  // QHD
+    { w: 3840, h: 2160 },  // 4K
   ];
   const ow = window.outerWidth || 1280;
   const oh = window.outerHeight || 800;
@@ -143,7 +155,6 @@ if (stealthLevel === 'full') {
   const picked = pool[Math.floor(seededRandom(sessionSeed + 9999) * pool.length)];
   const sw = picked.w;
   const sh = picked.h;
-  const dpr = (navigator.platform === 'MacIntel') ? 2 : 1;
 
   const overrides = {
     width: sw, height: sh, availWidth: sw, availHeight: sh - 25,
@@ -151,23 +162,28 @@ if (stealthLevel === 'full') {
   };
   // Override on Screen.prototype, NOT on the screen instance.
   // Real Chrome inherits screen properties from Screen.prototype — there are no
-  // own-property descriptors on the screen object itself. Overriding on the instance
-  // (Object.defineProperty(window.screen, ...)) is detectable via:
-  //   Object.getOwnPropertyDescriptor(screen, 'width') !== undefined → overridden!
-  // Prototype-level overrides are invisible to this check because
-  // getOwnPropertyDescriptor only checks own properties.
+  // own-property descriptors on the screen object. Overriding on the instance is
+  // detectable via Object.getOwnPropertyDescriptor(screen, 'width') !== undefined.
+  // Prototype-level overrides are invisible to this check.
   const screenProto = Object.getPrototypeOf(window.screen);
   for (const [key, value] of Object.entries(overrides)) {
     try {
       Object.defineProperty(screenProto, key, { get: () => value, configurable: true });
     } catch(e) {}
   }
-  try {
-    Object.defineProperty(window, 'devicePixelRatio', { get: () => dpr, configurable: true });
-  } catch(e) {}
-  try {
-    Object.defineProperty(window, 'screenY', { get: () => 25, configurable: true });
-  } catch(e) {}
+  // devicePixelRatio and screenY: Chrome defines these as OWN properties on window,
+  // so prototype overrides get shadowed. Delete the own property first, then set on
+  // prototype so getOwnPropertyDescriptor(window, 'devicePixelRatio') returns undefined.
+  // If delete fails (non-configurable), fall back to own-property override.
+  const winProto = Object.getPrototypeOf(window);
+  for (const [prop, val] of [['devicePixelRatio', dpr], ['screenY', 25]]) {
+    try {
+      delete window[prop];
+      Object.defineProperty(winProto, prop, { get: () => val, configurable: true });
+    } catch(e) {
+      try { Object.defineProperty(window, prop, { get: () => val, configurable: true }); } catch(e2) {}
+    }
+  }
 })();
 
 // Fix hasKnownBgColor: headless Chrome resolves CSS system colors like 'ActiveText'
